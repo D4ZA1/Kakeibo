@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import { ChartPie, LayoutGrid, List, ScanLine, type LucideIcon } from 'lucide-react-native';
 import { View } from 'react-native';
 
+import { useResumePending } from '@/features/pay/flow';
 import { useTokens } from '@/lib/use-tokens';
 
 function tabIcon(Icon: LucideIcon) {
@@ -19,6 +20,7 @@ function tabIcon(Icon: LucideIcon) {
 
 export default function TabLayout() {
   const t = useTokens();
+  useResumePending();
   return (
     <Tabs
       screenOptions={{

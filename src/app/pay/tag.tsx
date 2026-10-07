@@ -1,22 +1,21 @@
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PayeeLetter, PayHeader } from '@/components/pay/PayParts';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Text } from '@/components/ui/text';
-import { useCategories, useDb, useLiveQuery } from '@/db/provider';
+import { useCategories, useLiveQuery } from '@/db/provider';
 import { usePayDraft } from '@/features/pay/draft';
-import { savePayeeRule, suggestCategory } from '@/features/pay/suggest';
+import { suggestCategory } from '@/features/pay/suggest';
 import { formatPaise } from '@/lib/money';
 import { useTokens } from '@/lib/use-tokens';
 import { cn } from '@/lib/utils';
 
 export default function Tag() {
   const t = useTokens();
-  const db = useDb();
   const d = usePayDraft((s) => s.draft);
   const update = usePayDraft((s) => s.update);
   const { list: categories, cat } = useCategories();
@@ -39,11 +38,11 @@ export default function Tag() {
   const name = d.payeeName ?? d.payeeVpa;
   const shortPayee = name.split(',')[0];
 
-  const pay = async () => {
+  // Rule 5: scanning and tagging work everywhere, paying needs an Android UPI intent.
+  const canPay = Platform.OS === 'android';
+  const pay = () => {
     if (!categoryId) return;
-    update({ categoryId, note: note.trim() || undefined });
-    // ponytail: rule saved on tapping Pay, not after the payment succeeds; move into the M5 pay step if that matters.
-    if (always) await savePayeeRule(db, d.payeeVpa, categoryId);
+    update({ categoryId, note: note.trim() || undefined, saveRule: always });
     router.push('/pay/choose-app');
   };
 
@@ -123,11 +122,13 @@ export default function Tag() {
         )}
       </ScrollView>
       <View className="gap-2 px-5 pb-4">
-        <Button disabled={!selected} onPress={pay}>
+        <Button disabled={!selected || !canPay} onPress={pay}>
           <Text>Pay {formatPaise(d.amountPaise)}</Text>
         </Button>
         <Text className="text-center text-[13px] text-muted">
-          Opens your UPI app to enter your PIN
+          {canPay
+            ? 'Opens your UPI app to enter your PIN'
+            : 'Paying with UPI needs an Android phone'}
         </Text>
       </View>
     </SafeAreaView>

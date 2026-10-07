@@ -91,3 +91,13 @@ export function useCategories() {
     ) ?? [];
   return { list, cat: (id?: string) => list.find((c) => c.id === id) };
 }
+
+/** One transaction, live. undefined while loading, null if there is no such id. */
+export function useTxn(id: string) {
+  return useLiveQuery(
+    async (db) =>
+      (await db.selectFrom('transactions').selectAll().where('id', '=', id).executeTakeFirst()) ??
+      null,
+    [id],
+  );
+}

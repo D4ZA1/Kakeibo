@@ -5,9 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CategoryLabel, categoryOf, StatusCircle } from '@/components/receipt/Receipt';
 import { Text } from '@/components/ui/text';
-import { useCategories, useDb, useLiveQuery } from '@/db/provider';
-import { SAMPLE_DRAFT } from '@/db/sample';
-import { markByUser } from '@/features/pay/status';
+import { useCategories, useDb, useTxn } from '@/db/provider';
+import { usePayDraft } from '@/features/pay/draft';
+import { askLater, settled } from '@/features/pay/flow';
+import { markByUser } from '@/features/pay/payment';
+import { parseUpiResponse } from '@/features/pay/upiResponse';
 import { formatPaise } from '@/lib/money';
 import { useTokens } from '@/lib/use-tokens';
 
@@ -41,32 +43,27 @@ export default function Confirm() {
   const t = useTokens();
   const db = useDb();
   const { list: categories } = useCategories();
-  // ?id= comes from a pending row in History/Home. Without it this is still the M5 mockup.
-  const { id } = useLocalSearchParams<{ id?: string }>();
-  const txn = useLiveQuery(
-    (db) =>
-      id
-        ? db.selectFrom('transactions').selectAll().where('id', '=', id).executeTakeFirst()
-        : Promise.resolve(undefined),
-    [id],
-  );
-  if (id && !txn) return <SafeAreaView className="flex-1 bg-bg" />;
-  if (!categories.length) return <SafeAreaView className="flex-1 bg-bg" />;
+  const clearDraft = usePayDraft((s) => s.clear);
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const txn = useTxn(id);
+  if (!txn || !categories.length) return <SafeAreaView className="flex-1 bg-bg" />;
 
-  const d = txn
-    ? {
-        payeeName: txn.payeeName ?? txn.payeeVpa,
-        amountPaise: txn.amountPaise,
-        categoryId: txn.categoryId,
-        upiApp: txn.upiApp ?? 'Your UPI app',
-      }
-    : SAMPLE_DRAFT;
-  const category = categoryOf(d.categoryId, categories);
+  const payee = txn.payeeName ?? txn.payeeVpa;
+  const app = txn.upiApp ?? 'Your UPI app';
+  const category = categoryOf(txn.categoryId, categories);
+  const reported = parseUpiResponse(txn.upiResponseRaw).status;
   const answer = async (paid: boolean) => {
-    if (!txn) return router.replace(paid ? '/pay/success' : '/pay/failed');
     await markByUser(db, txn.id, paid);
-    router.replace({ pathname: '/txn/[id]', params: { id: txn.id } });
+    await settled(txn.id);
+    router.replace({ pathname: paid ? '/pay/success' : '/pay/failed', params: { id: txn.id } });
   };
+  const later = async () => {
+    await askLater(txn.id, payee, txn.amountPaise);
+    clearDraft();
+    router.dismissAll();
+    router.replace('/');
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
       <View className="flex-1 gap-6 px-5 pt-16">
@@ -75,21 +72,23 @@ export default function Confirm() {
             className="h-11 w-11 items-center justify-center rounded-pill"
             style={{ backgroundColor: category.color }}
           >
-            <Text className="font-bold text-ink">{d.payeeName[0]}</Text>
+            <Text className="font-bold text-ink">{payee[0]}</Text>
           </View>
           <View className="flex-1">
-            <Text className="font-semibold text-base">{d.payeeName}</Text>
+            <Text className="font-semibold text-base">{payee}</Text>
             <CategoryLabel category={category} />
           </View>
-          <Text className="font-extrabold text-2xl">{formatPaise(d.amountPaise)}</Text>
+          <Text className="font-extrabold text-2xl">{formatPaise(txn.amountPaise)}</Text>
         </View>
         <View className="gap-3">
           <Text className="font-extrabold text-[34px] leading-[40px]">
             Did the payment go through?
           </Text>
           <Text className="text-base leading-6 text-muted">
-            {d.upiApp} didn&apos;t send a clear result. A quick look at its success screen or your
-            bank SMS tells you.
+            {reported === 'FAILURE'
+              ? `${app} reported a failure, but that isn't always right.`
+              : `${app} didn't send a clear result.`}{' '}
+            A quick look at its success screen or your bank SMS tells you.
           </Text>
         </View>
       </View>
@@ -108,11 +107,7 @@ export default function Confirm() {
         />
         <Pressable
           role="button"
-          onPress={() => {
-            if (txn) return router.back();
-            router.dismissAll();
-            router.replace('/');
-          }}
+          onPress={later}
           className="h-14 flex-row items-center justify-center gap-2"
         >
           <Clock size={18} strokeWidth={1.8} color={t.muted} />

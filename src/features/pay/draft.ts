@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
-import { amountToPaise, type ParsedUpi } from '@/features/pay/upiUri';
+import type { Transaction } from '@/db/types';
+import { amountToPaise, parseUpiUri, type ParsedUpi } from '@/features/pay/upiUri';
 
 /** The in-progress payment from scan to result (docs/spec.md, "Payment draft"). */
 export type PayDraft = {
@@ -14,7 +15,9 @@ export type PayDraft = {
   qrNote?: string;
   categoryId?: string;
   note?: string;
-  txnId?: string;
+  saveRule?: boolean; // "Always tag", written once the payment is saved
+  txnId?: string; // our DB id once saved as pending
+  upiApp?: string; // label of the app it was sent to
 };
 
 type Store = {
@@ -43,3 +46,22 @@ export const usePayDraft = create<Store>((set) => ({
   update: (patch) => set((s) => (s.draft ? { draft: { ...s.draft, ...patch } } : s)),
   clear: () => set({ draft: null }),
 }));
+
+/**
+ * A draft for paying a saved transaction again ("Try again" after the app was killed and the
+ * in-memory draft is gone). `rawUri` is the link we sent, so it is paid the same way as before.
+ */
+export function draftFromTxn(txn: Transaction): PayDraft | null {
+  if (!parseUpiUri(txn.rawUri)) return null;
+  return {
+    rawUri: txn.rawUri,
+    payeeVpa: txn.payeeVpa,
+    payeeName: txn.payeeName ?? undefined,
+    amountPaise: txn.amountPaise,
+    amountLocked: true,
+    merchantCode: txn.merchantCode ?? undefined,
+    txnRef: txn.qrTxnRef ?? undefined,
+    categoryId: txn.categoryId,
+    note: txn.note ?? undefined,
+  };
+}
