@@ -57,9 +57,10 @@ npm test                  jest unit tests
 1. **Money is integer paise.** Store and calculate in paise (`590000` = ₹5,900.00). Format only at the edge with `src/lib/money.ts` (Indian grouping: ₹1,00,000).
 2. **Never trust the UPI app's status alone.** It can be missing or wrong. Show `/pay/confirm` whenever the status is anything other than an unambiguous `SUCCESS`, and let the user mark the result.
 3. **Save before paying.** Insert the transaction as `pending` before launching the UPI app, then update it. A user who never comes back must still have a record.
-4. **Do not rewrite merchant QR links.** If the scanned QR already contains `am` or `sign`, pass the original `upi://` string to the UPI app unchanged; editing it can break the merchant's signature. Only build a fresh link for QRs without an amount (personal QRs).
+4. **Do not rewrite merchant QR links.** If the scanned QR already contains `am` or `sign`, pass the original `upi://` string to the UPI app unchanged; editing it can break the merchant's signature. Only build a fresh link for QRs without an amount (personal QRs). A signed QR without an amount is rejected at scan, since the amount the user types can't be added to it.
 5. **Android only for payments.** On iOS, scanning, tagging and insights still work, but the Pay button explains that payments need Android. Guard with `Platform.OS`.
 6. **Match the design.** Dark and light themes; colors live once in `src/lib/theme.js` (classNames via `tailwind.config.js`, JS props via `useTokens()`), never raw hex in components. The Scan screen is always dark. Touch targets at least 44 px. Every icon-only button gets an `accessibilityLabel`.
 7. **Category colors are fixed** and come from the `categories` table, so a category looks the same on every screen.
 8. **Tests:** the UPI link parser, the UPI response parser, money formatting and the monthly aggregation queries must have unit tests.
-9. Keep components small and typed. No `any`. No new dependencies without saying why in the PR or commit message.
+9. **No payment data in logs.** Never log VPAs, amounts or raw UPI responses outside `__DEV__`.
+10. Keep components small and typed. No `any`. No new dependencies without saying why in the PR or commit message.

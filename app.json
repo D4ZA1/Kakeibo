@@ -50,7 +50,6 @@
         "expo-image-picker",
         {
           "photosPermission": "Kakeibo reads a QR code from a photo you pick.",
-          "cameraPermission": false,
           "microphonePermission": false
         }
       ]

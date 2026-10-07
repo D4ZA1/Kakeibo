@@ -1,0 +1,2 @@
+expo.modules.upiintent
+xml upi_intent_paths

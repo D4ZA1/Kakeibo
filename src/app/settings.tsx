@@ -156,6 +156,11 @@ export default function Settings() {
               title="Seed sample months"
               onPress={() => seedAndReadBack(db)}
             />
+            <SettingsRow
+              icon={CreditCard}
+              title="UPI intent test"
+              onPress={() => router.push('/dev/upi-test')}
+            />
           </SettingsGroup>
         )}
 

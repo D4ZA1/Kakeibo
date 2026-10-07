@@ -26,7 +26,7 @@ export type UpiResult = {
 };
 
 export function getInstalledApps(): UpiApp[];
-export function pay(uri: string, packageName?: string): Promise<UpiResult>;
+export function pay(uri: string, packageName: string): Promise<UpiResult>;
 ```
 
 ## Android manifest
@@ -202,3 +202,23 @@ Routing after `pay()` resolves: `SUCCESS` → Success. `FAILURE`, `SUBMITTED`, `
 ## Testing
 
 There is no UPI sandbox for intents. Test with ₹1 payments between your own accounts on a real Android device with Google Pay and PhonePe installed. Log every `raw` response during development: apps differ, and some block intent payments to personal VPAs or cap their amounts. Unit-test both parsers with real captured strings.
+
+## Spike results (M5, 2026-10-07)
+
+Tested on one Android phone with GPay, PhonePe, Paytm, iMobile (ICICI) and WhatsApp installed.
+
+| Case | Google Pay | iMobile | WhatsApp |
+|---|---|---|---|
+| Personal VPA, `upi://pay` intent, no `am` | Blocked: "payment amount exceeds the limit". Returns `raw: null, resultCode: 0` (→ `cancelled`, `UNKNOWN`) | not tested | not tested |
+| Personal VPA, `upi://pay` intent, `am=1.00` | Blocked, same message and result | not tested | not tested |
+| Personal VPA, same link as a **QR image** shared to the app (`shareQrImage`) | **Works**: GPay reads it like a scanned QR, ₹1 paid. No result comes back | — | — |
+| Merchant QR, unchanged | not tested yet (test merchants don't show in GPay) | | |
+
+PhonePe and Paytm also refuse the personal-VPA intent.
+
+What we do with it (`isMerchantCode` in `src/features/pay/mcc.ts`):
+- Personal payee (no `mc` or `0000`), any app → `shareQrImage(uri, pkg)`, then straight to Confirm (no result is returned).
+- Everything else → `pay()` intent as above.
+- If an app ever refuses the image share: fall back to copying the UPI ID and opening the app (not built yet).
+
+This relies on undocumented Google Pay behaviour; recheck it after Google Pay updates. To do: confirm the QR image share in PhonePe and Paytm, a real merchant QR in each app, and a cancel in each app.
