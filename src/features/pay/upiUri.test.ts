@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 
-import { amountToPaise, buildPayUri, parseUpiUri } from './upiUri';
+import { amountToPaise, buildPayUri, normalizeIndianPhone, parseUpiUri, upiNumberVpa } from './upiUri';
 
 const MERCHANT =
   'upi://pay?pa=applestore@hdfcbank&pn=Apple%20Store%2C%20BKC&am=5900.00&cu=INR&mc=5732&tr=AS-2041-8831';
@@ -95,4 +95,30 @@ describe('buildPayUri', () => {
       tn: 'Dinner',
     });
   });
+});
+
+describe('upiNumberVpa', () => {
+  test.each([
+    ['+91 98765 43210', '9876543210@upi'],
+    ['098765-43210', '9876543210@upi'],
+    ['9876543210', '9876543210@upi'],
+    ['919876543210', '9876543210@upi'],
+  ])('%s → %s', (input, out) => expect(upiNumberVpa(input)).toBe(out));
+
+  test.each(['1234567890', '022 2345 6789', '98765', '+1 415 555 0100'])('rejects %s', (input) =>
+    expect(upiNumberVpa(input)).toBeNull(),
+  );
+});
+
+describe('normalizeIndianPhone', () => {
+  test.each([
+    ['+91 98765 43210', '9876543210'],
+    ['098765-43210', '9876543210'],
+    ['9876543210', '9876543210'],
+    ['919876543210', '9876543210'],
+  ])('%s → %s', (input, out) => expect(normalizeIndianPhone(input)).toBe(out));
+
+  test.each(['1234567890', '022 2345 6789', '98765', '+1 415 555 0100'])('rejects %s', (input) =>
+    expect(normalizeIndianPhone(input)).toBeNull(),
+  );
 });

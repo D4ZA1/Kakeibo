@@ -8,6 +8,7 @@ import {
   applyAppResult,
   cancelPayment,
   markByUser,
+  recategorize,
   RESUME_WINDOW_MS,
   resumablePending,
   savePending,
@@ -184,4 +185,12 @@ describe('markByUser', () => {
     expect((await row('a')).status).toBe('success');
     expect(await markByUser(db, 'missing', true)).toBe(false);
   });
+});
+
+test('recategorize moves a payment and returns the old category for Undo', async () => {
+  await save('a');
+  expect(await recategorize(db, 'a', 'tech', 5000)).toBe('food');
+  expect(await row('a')).toMatchObject({ categoryId: 'tech', updatedAt: 5000 });
+  expect(await recategorize(db, 'a', 'food')).toBe('tech');
+  expect(await recategorize(db, 'missing', 'food')).toBeUndefined();
 });

@@ -26,6 +26,9 @@ const themes = {
     'toggle-knob-on': '#1F1F1F',
     'toggle-knob-off': '#BDBDBD',
     scrim: 'rgba(0,0,0,0.55)',
+    toast: '#3A3A3A', // two steps above surface, so it reads over cards
+    'toast-border': 'rgba(255,255,255,0.14)', // the edge a shadow can't draw on near-black
+    'toast-shadow': 'rgba(0,0,0,0.6)',
   },
   light: {
     bg: '#F0F0EC',
@@ -51,6 +54,9 @@ const themes = {
     'toggle-knob-on': '#FFFFFF',
     'toggle-knob-off': '#FFFFFF',
     scrim: 'rgba(0,0,0,0.35)',
+    toast: '#FFFFFF',
+    'toast-border': 'rgba(0,0,0,0.10)', // separates it from white cards
+    'toast-shadow': 'rgba(20,20,20,0.22)',
   },
 };
 

@@ -91,3 +91,19 @@ export async function resumablePending(db: Db, now = Date.now()) {
     .executeTakeFirst();
   return row?.status === 'pending' && now - row.createdAt < RESUME_WINDOW_MS ? row.id : undefined;
 }
+
+/** "Change category" on a receipt. Returns the previous category, for Undo. */
+export async function recategorize(db: Db, id: string, categoryId: string, now = Date.now()) {
+  const before = await db
+    .selectFrom('transactions')
+    .select('categoryId')
+    .where('id', '=', id)
+    .executeTakeFirst();
+  if (!before) return undefined;
+  await db
+    .updateTable('transactions')
+    .set({ categoryId, updatedAt: now })
+    .where('id', '=', id)
+    .execute();
+  return before.categoryId;
+}

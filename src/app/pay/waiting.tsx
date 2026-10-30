@@ -1,6 +1,5 @@
 import { Redirect, router } from 'expo-router';
-import { useEffect } from 'react';
-import { AppState, View } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
@@ -10,8 +9,8 @@ import { Text } from '@/components/ui/text';
 import { useCategories, useDb } from '@/db/provider';
 import { usePayDraft } from '@/features/pay/draft';
 import { settled } from '@/features/pay/flow';
-import { isMerchantCode } from '@/features/pay/mcc';
 import { cancelPayment } from '@/features/pay/payment';
+import { tryOrToast } from '@/features/toast/toast';
 import { formatPaise } from '@/lib/money';
 import { useTokens } from '@/lib/use-tokens';
 
@@ -25,26 +24,17 @@ export default function Waiting() {
   const { list: categories } = useCategories();
   const id = d?.txnId;
 
-  // A shared QR image never reports back: once the user returns from the UPI app, ask them.
-  // ('active' only fires on coming back; the app may already be in the background when this mounts.)
-  // Merchant intents resolve in startPayment, which routes on from here.
-  const viaQr = !isMerchantCode(d?.merchantCode);
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && viaQr && id)
-        router.replace({ pathname: '/pay/confirm', params: { id } });
-    });
-    return () => sub.remove();
-  }, [viaQr, id]);
+  // The UPI app opens in our task; startPayment moves on from here when the user is back.
 
   if (!d?.amountPaise || !id) return <Redirect href="/" />;
   if (!categories.length) return <SafeAreaView className="flex-1 bg-bg" />;
   const app = d.upiApp ?? 'your UPI app';
-  const cancel = async () => {
-    await cancelPayment(db, id);
-    await settled(id);
-    router.replace({ pathname: '/pay/failed', params: { id } });
-  };
+  const cancel = () =>
+    tryOrToast("Couldn't cancel", async () => {
+      await cancelPayment(db, id);
+      router.replace({ pathname: '/pay/failed', params: { id } });
+      await settled(id);
+    });
 
   return (
     <SafeAreaView className="flex-1 bg-bg">

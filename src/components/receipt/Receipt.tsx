@@ -1,6 +1,6 @@
 import { Check, Pencil, Share, X } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { Share as RNShare, View } from 'react-native';
+import { Pressable, Share as RNShare, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
@@ -75,6 +75,8 @@ type Props = {
   upiRef?: string;
   app?: string;
   when: Date;
+  /** Makes the category pill tappable ("tap to change"). */
+  onChangeCategory?: () => void;
 };
 
 /** The Paid layout: status circle, headline, receipt rows, month insight. Used by /pay/success and /txn/[id]. */
@@ -87,6 +89,7 @@ export function Receipt({
   upiRef,
   app,
   when,
+  onChangeCategory,
 }: Props) {
   const t = useTokens();
   const amount = formatPaise(amountPaise);
@@ -124,10 +127,16 @@ export function Receipt({
       </View>
       <InfoCard>
         <InfoRow label="Category">
-          <View className="h-11 flex-row items-center gap-2 rounded-pill bg-surface-2 px-3.5">
+          <Pressable
+            role="button"
+            accessibilityLabel={`Category ${category.name}. Change`}
+            disabled={!onChangeCategory}
+            onPress={onChangeCategory}
+            className="h-11 flex-row items-center gap-2 rounded-pill bg-surface-2 px-3.5"
+          >
             <CategoryLabel category={category} />
-            <Pencil size={14} strokeWidth={1.8} color={t.text} />
-          </View>
+            {onChangeCategory && <Pencil size={14} strokeWidth={1.8} color={t.text} />}
+          </Pressable>
         </InfoRow>
         {note ? <InfoRow label="Note">{note}</InfoRow> : null}
         {upiRef ? <InfoRow label="UPI reference">{upiRef}</InfoRow> : null}

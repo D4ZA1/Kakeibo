@@ -1,7 +1,9 @@
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { ChartPie, LayoutGrid, List, ScanLine, type LucideIcon } from 'lucide-react-native';
 import { View } from 'react-native';
 
+import { getSetting } from '@/db/client';
+import { useLiveQuery } from '@/db/provider';
 import { useResumePending } from '@/features/pay/flow';
 import { useTokens } from '@/lib/use-tokens';
 
@@ -21,6 +23,9 @@ function tabIcon(Icon: LucideIcon) {
 export default function TabLayout() {
   const t = useTokens();
   useResumePending();
+  // First launch: no name yet → onboarding. null = loaded and missing.
+  const firstName = useLiveQuery(async (db) => (await getSetting(db, 'firstName')) ?? null, []);
+  if (firstName === null) return <Redirect href="/welcome" />;
   return (
     <Tabs
       screenOptions={{

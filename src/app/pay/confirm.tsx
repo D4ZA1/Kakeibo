@@ -10,6 +10,7 @@ import { usePayDraft } from '@/features/pay/draft';
 import { askLater, settled } from '@/features/pay/flow';
 import { markByUser } from '@/features/pay/payment';
 import { parseUpiResponse } from '@/features/pay/upiResponse';
+import { toast, tryOrToast } from '@/features/toast/toast';
 import { formatPaise } from '@/lib/money';
 import { useTokens } from '@/lib/use-tokens';
 
@@ -52,13 +53,19 @@ export default function Confirm() {
   const app = txn.upiApp ?? 'Your UPI app';
   const category = categoryOf(txn.categoryId, categories);
   const reported = parseUpiResponse(txn.upiResponseRaw).status;
-  const answer = async (paid: boolean) => {
-    await markByUser(db, txn.id, paid);
-    await settled(txn.id);
-    router.replace({ pathname: paid ? '/pay/success' : '/pay/failed', params: { id: txn.id } });
-  };
+  const answer = (paid: boolean) =>
+    tryOrToast("Couldn't save your answer", async () => {
+      await markByUser(db, txn.id, paid);
+      router.replace({ pathname: paid ? '/pay/success' : '/pay/failed', params: { id: txn.id } });
+      await settled(txn.id); // dropping the reminder must not block the next screen
+    });
   const later = async () => {
-    await askLater(txn.id, payee, txn.amountPaise);
+    await askLater(db, txn.id, payee, txn.amountPaise);
+    toast.show({
+      variant: 'pending',
+      title: 'Saved as pending',
+      subtitle: "We'll ask you again in 30 min",
+    });
     clearDraft();
     router.dismissAll();
     router.replace('/');

@@ -12,6 +12,7 @@ import { getSetting, setSetting } from '@/db/client';
 import { useCategories, useDb } from '@/db/provider';
 import { usePayDraft } from '@/features/pay/draft';
 import { startPayment } from '@/features/pay/flow';
+import { tryOrToast } from '@/features/toast/toast';
 import { formatPaise } from '@/lib/money';
 import { useTokens } from '@/lib/use-tokens';
 import { cn } from '@/lib/utils';
@@ -31,23 +32,26 @@ export default function ChooseApp() {
   // ?choose=1 (from "Pay with another app") always shows the sheet.
   const { choose } = useLocalSearchParams<{ choose?: string }>();
 
-  const open = async (app: UpiApp, alwaysUse: boolean) => {
-    if (!d || busy) return;
-    setBusy(true);
-    await Promise.all([
-      setSetting(db, 'preferredUpiApp', app.packageName),
-      setSetting(db, 'alwaysUseUpiApp', alwaysUse ? '1' : '0'),
-    ]);
-    const { id, result } = await startPayment(db, d, app);
-    router.replace('/pay/waiting');
-    const outcome = await result;
-    if (outcome !== 'waiting') {
-      router.replace({
-        pathname: outcome === 'success' ? '/pay/success' : '/pay/confirm',
-        params: { id },
-      });
-    }
-  };
+  const open = (app: UpiApp, alwaysUse: boolean) =>
+    tryOrToast("Couldn't start the payment", async () => {
+      if (!d || busy) return;
+      setBusy(true);
+      try {
+        await Promise.all([
+          setSetting(db, 'preferredUpiApp', app.packageName),
+          setSetting(db, 'alwaysUseUpiApp', alwaysUse ? '1' : '0'),
+        ]);
+        const { id, result } = await startPayment(db, d, app);
+        router.replace('/pay/waiting');
+        const outcome = await result;
+        router.replace({
+          pathname: outcome === 'success' ? '/pay/success' : '/pay/confirm',
+          params: { id },
+        });
+      } finally {
+        setBusy(false);
+      }
+    });
 
   useEffect(() => {
     Promise.all([getSetting(db, 'preferredUpiApp'), getSetting(db, 'alwaysUseUpiApp')]).then(

@@ -14,6 +14,14 @@ export default function PayLayout() {
           contentStyle: { backgroundColor: 'transparent' },
         }}
       />
+      <Stack.Screen
+        name="category"
+        options={{
+          presentation: 'transparentModal',
+          animation: 'fade',
+          contentStyle: { backgroundColor: 'transparent' },
+        }}
+      />
     </Stack>
   );
 }

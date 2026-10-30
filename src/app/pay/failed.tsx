@@ -1,4 +1,6 @@
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { Clock } from 'lucide-react-native';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +19,9 @@ export default function Failed() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const clearDraft = usePayDraft((s) => s.clear);
   const txn = useTxn(id);
+  useEffect(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  }, []);
   if (!txn) return <SafeAreaView className="flex-1 bg-bg" />;
 
   const app = txn.upiApp ?? 'Your UPI app';

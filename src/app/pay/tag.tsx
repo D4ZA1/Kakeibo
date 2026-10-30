@@ -1,8 +1,9 @@
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CategoryGrid } from '@/components/CategoryGrid';
 import { PayeeLetter, PayHeader } from '@/components/pay/PayParts';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -12,7 +13,6 @@ import { usePayDraft } from '@/features/pay/draft';
 import { suggestCategory } from '@/features/pay/suggest';
 import { formatPaise } from '@/lib/money';
 import { useTokens } from '@/lib/use-tokens';
-import { cn } from '@/lib/utils';
 
 export default function Tag() {
   const t = useTokens();
@@ -38,8 +38,6 @@ export default function Tag() {
   const name = d.payeeName ?? d.payeeVpa;
   const shortPayee = name.split(',')[0];
 
-  // Rule 5: scanning and tagging work everywhere, paying needs an Android UPI intent.
-  const canPay = Platform.OS === 'android';
   const pay = () => {
     if (!categoryId) return;
     update({ categoryId, note: note.trim() || undefined, saveRule: always });
@@ -67,30 +65,7 @@ export default function Tag() {
           <Text className="font-bold text-lg">Category</Text>
           {suggested && <Text className="text-[14px] text-muted">Suggested: {suggested.name}</Text>}
         </View>
-        <View className="-m-1 flex-row flex-wrap">
-          {categories.map((c) => {
-            const on = c.id === categoryId;
-            return (
-              <View key={c.id} className="w-1/4 p-1">
-                <Pressable
-                  role="radio"
-                  aria-checked={on}
-                  accessibilityLabel={c.name}
-                  onPress={() => setPicked(c.id)}
-                  className={cn(
-                    'h-[76px] items-center justify-center gap-1.5 rounded-tile border-[1.5px] bg-surface',
-                    on ? 'border-text' : 'border-transparent',
-                  )}
-                >
-                  <View className="h-5 w-5 rounded-full" style={{ backgroundColor: c.color }} />
-                  <Text className={cn('text-[14px]', on && 'font-bold')} numberOfLines={1}>
-                    {c.name}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </View>
+        <CategoryGrid categories={categories} selected={categoryId} onSelect={setPicked} />
 
         <Text className="mb-2 mt-6 font-bold text-lg">
           Note <Text className="font-sans text-lg text-muted">(optional)</Text>
@@ -122,14 +97,10 @@ export default function Tag() {
         )}
       </ScrollView>
       <View className="gap-2 px-5 pb-4">
-        <Button disabled={!selected || !canPay} onPress={pay}>
+        <Button disabled={!selected} onPress={pay}>
           <Text>Pay {formatPaise(d.amountPaise)}</Text>
         </Button>
-        <Text className="text-center text-[13px] text-muted">
-          {canPay
-            ? 'Opens your UPI app to enter your PIN'
-            : 'Paying with UPI needs an Android phone'}
-        </Text>
+        <Text className="text-center text-[13px] text-muted">Opens your UPI app to enter your PIN</Text>
       </View>
     </SafeAreaView>
   );

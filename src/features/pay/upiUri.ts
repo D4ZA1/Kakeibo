@@ -44,6 +44,24 @@ export function parseUpiUri(text: string): ParsedUpi | null {
   };
 }
 
+/**
+ * An Indian mobile number → 10-digit normalized phone ('9876543210'), or null if it isn't one.
+ */
+export function normalizeIndianPhone(phone: string): string | null {
+  const d = phone.replace(/\D/g, '').replace(/^(91|0)(?=\d{10}$)/, '');
+  return /^[6-9]\d{9}$/.test(d) ? d : null;
+}
+
+/**
+ * An Indian mobile number → its NPCI "UPI number" address (`9876543210@upi`), or null if it isn't one.
+ * shortcut: assumes the payee has a UPI number linked (default in GPay/PhonePe); the UPI app shows
+ * the resolved name before paying, so a wrong guess fails visibly rather than paying a stranger.
+ */
+export function upiNumberVpa(phone: string): string | null {
+  const d = normalizeIndianPhone(phone);
+  return d ? `${d}@upi` : null;
+}
+
 export const amountToPaise = (am: string) => Math.round(Number(am) * 100);
 
 /** The link handed to the UPI app. Merchant QRs (amount or signature) go through unchanged. */

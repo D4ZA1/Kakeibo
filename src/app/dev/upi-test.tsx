@@ -1,49 +1,45 @@
-// Dev-only harness for the M5 spike: send a upi:// link to each installed UPI app and record what comes back.
+// Dev-only harness: probe undocumented links (GPay's scanner, WhatsApp Pay via upi://) on iOS.
 import { router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useState } from 'react';
-import { ScrollView, TextInput, View } from 'react-native';
+import { Linking, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getInstalledApps, payRaw, shareQrImage } from '@/../modules/upi-intent';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { usePayDraft } from '@/features/pay/draft';
-import { isMerchantCode } from '@/features/pay/mcc';
-import { parseUpiUri } from '@/features/pay/upiUri';
-import { parseUpiResponse } from '@/features/pay/upiResponse';
 import { useTokens } from '@/lib/use-tokens';
 
-type Run = { app: string; uri: string; out: string };
+// Guesses: Google doesn't document the link behind GPay's scan widget.
+const CANDIDATES = [
+  'gpay://scan',
+  'gpay://qr',
+  'gpay://scanner',
+  'gpay://upi/scan',
+  'gpay://scan_qr',
+  'gpay://scanqr',
+  'tez://scan',
+  'tez://upi/scan',
+];
+
+type Run = { link: string; out: string };
 
 export default function UpiTest() {
   const t = useTokens();
-  const draft = usePayDraft((s) => s.draft);
-  const [uri, setUri] = useState(draft?.rawUri ?? 'upi://pay?pa=you@okaxis&pn=Me&am=1.00&cu=INR');
   const [runs, setRuns] = useState<Run[]>([]);
-  const apps = getInstalledApps();
-  const link = uri.trim();
-  const qr = parseUpiUri(link);
-  const asQr = qr ? !isMerchantCode(qr.mc) : false;
+  const draft = usePayDraft((s) => s.draft);
+  // On iOS, upi:// goes to whichever app claims it (WhatsApp here). Add `&am=1.00&cu=INR` to test.
+  const [uri, setUri] = useState(draft?.rawUri ?? 'upi://pay?pa=you@okaxis&pn=Me&am=1.00&cu=INR');
 
-  const record = (app: string, out: string) => {
-    console.log(`[upi-test] ${app}\n${link}\n${out}`);
-    setRuns((rs) => [{ app, uri: link, out }, ...rs]);
-  };
-
-  const run = async (label: string, packageName: string) => {
-    if (asQr) {
-      return record(
-        `${label} (QR image)`,
-        shareQrImage(link, packageName) ? 'shared QR image' : 'share failed',
-      );
-    }
-    try {
-      const r = await payRaw(link, packageName);
-      record(label, JSON.stringify({ ...r, parsed: parseUpiResponse(r.raw) }, null, 2));
-    } catch (e) {
-      record(label, `ERROR ${e instanceof Error ? e.message : String(e)}`);
-    }
+  const open = (link: string) => {
+    const record = (out: string) => {
+      console.log(`[upi-test] ${link}\n${out}`);
+      setRuns((rs) => [{ link, out }, ...rs]);
+    };
+    Linking.openURL(link).then(
+      () => record('opened'),
+      (e) => record(`ERROR ${e instanceof Error ? e.message : String(e)}`),
+    );
   };
 
   return (
@@ -52,38 +48,33 @@ export default function UpiTest() {
         <Button variant="icon" accessibilityLabel="Back" onPress={() => router.back()}>
           <ArrowLeft size={22} strokeWidth={1.8} color={t.text} />
         </Button>
-        <Text className="font-bold text-lg">UPI intent test</Text>
+        <Text className="font-bold text-lg">GPay scanner link test</Text>
       </View>
       <ScrollView contentContainerClassName="gap-4 px-5 pb-10 pt-4">
+        <Text className="text-muted">
+          Tap one, note which screen opens, come back, try the next.
+        </Text>
         <TextInput
           value={uri}
           onChangeText={setUri}
           multiline
           autoCapitalize="none"
           autoCorrect={false}
-          accessibilityLabel="UPI link"
+          accessibilityLabel="Link"
           className="min-h-[88px] rounded-card bg-surface p-4 font-sans text-sm text-text"
         />
-        <Text className="text-muted">
-          {apps.length} UPI app{apps.length === 1 ? '' : 's'} found. Scan a QR first to prefill its
-          link.
-        </Text>
-        {apps.map((a) => (
-          <Button
-            key={a.packageName}
-            variant={asQr ? 'default' : 'outline'}
-            onPress={() => run(a.label, a.packageName)}
-          >
-            <Text>
-              {asQr ? 'Send QR image to' : 'Pay with'} {a.label}
-            </Text>
+        <Button onPress={() => open(uri.trim())}>
+          <Text>Open link as-is</Text>
+        </Button>
+        {CANDIDATES.map((link) => (
+          <Button key={link} variant="outline" onPress={() => open(link)}>
+            <Text>{link}</Text>
           </Button>
         ))}
         {runs.map((r, i) => (
           <View key={i} className="gap-1 rounded-card bg-surface p-4">
-            <Text className="font-bold">{r.app}</Text>
-            <Text selectable className="text-xs text-muted">
-              {r.uri}
+            <Text selectable className="font-bold">
+              {r.link}
             </Text>
             <Text selectable className="font-mono text-xs">
               {r.out}

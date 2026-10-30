@@ -1,4 +1,6 @@
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,6 +17,9 @@ export default function Success() {
   const { list: categories } = useCategories();
   const clearDraft = usePayDraft((s) => s.clear);
   const txn = useTxn(id);
+  useEffect(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, []);
   if (!txn || !categories.length) return <SafeAreaView className="flex-1 bg-bg" />;
   const ref = txn.upiApprovalRef ?? txn.upiTxnId;
 
@@ -30,6 +35,9 @@ export default function Success() {
           upiRef={ref ? groupRef(ref) : undefined}
           app={txn.upiApp ?? undefined}
           when={new Date(txn.createdAt)}
+          onChangeCategory={() =>
+            router.push({ pathname: '/pay/category', params: { id: txn.id } })
+          }
         />
       </ScrollView>
       <View className="px-5 pb-4">

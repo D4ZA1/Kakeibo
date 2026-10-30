@@ -1,5 +1,8 @@
+import { scanFromURLAsync } from 'expo-camera';
+import { presentContactPickerAsync } from 'expo-contacts/legacy';
+import { launchImageLibraryAsync } from 'expo-image-picker';
 import { router } from 'expo-router';
-import { Delete } from 'lucide-react-native';
+import { BookUser, Delete, Image as ImageIcon } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,8 +10,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PayeeLetter, PayHeader } from '@/components/pay/PayParts';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
+import { useDb } from '@/db/provider';
 import { usePayDraft } from '@/features/pay/draft';
-import { parseUpiUri, VPA } from '@/features/pay/upiUri';
+import { getSavedPayee, savePayee } from '@/features/pay/savedPayees';
+import { normalizeIndianPhone, parseUpiUri, VPA } from '@/features/pay/upiUri';
+import { toast } from '@/features/toast/toast';
 import { formatPaise } from '@/lib/money';
 import { useTokens } from '@/lib/use-tokens';
 
@@ -24,12 +30,18 @@ const toPaise = (s: string) => {
 
 export default function Amount() {
   const t = useTokens();
+  const db = useDb();
   const draft = usePayDraft((s) => s.draft);
   const start = usePayDraft((s) => s.start);
   const update = usePayDraft((s) => s.update);
   // No draft = arrived from "Enter UPI ID": ask for the VPA first.
   const manual = !draft;
   const [vpa, setVpa] = useState('');
+  const [name, setName] = useState('');
+  const [savedUri, setSavedUri] = useState<string>();
+  const [linkedPhone, setLinkedPhone] = useState<string>();
+  const [isLinked, setIsLinked] = useState(false);
+  const [noMobile, setNoMobile] = useState(false);
   const vpaOk = VPA.test(vpa.trim());
   const [input, setInput] = useState('');
   const [capHit, setCapHit] = useState(false);
@@ -54,8 +66,90 @@ export default function Amount() {
     setIfAllowed(next % 100 ? (next / 100).toFixed(2) : String(next / 100));
   };
 
+  // Upload or link a UPI QR image for a contact or standalone.
+  const uploadQr = async (phone = linkedPhone, contactName = name) => {
+    const picked = await launchImageLibraryAsync({ mediaTypes: ['images'] });
+    if (picked.canceled || !picked.assets?.[0]?.uri) return;
+
+    const [code] = await scanFromURLAsync(picked.assets[0].uri, ['qr']).catch(() => []);
+    const qr = code?.data ? parseUpiUri(code.data) : null;
+    if (!qr) {
+      toast.show({
+        variant: 'error',
+        title: "Couldn't read UPI QR",
+        subtitle: "The selected image doesn't contain a valid UPI payment QR.",
+      });
+      return;
+    }
+
+    if (phone) {
+      await savePayee(db, {
+        phone,
+        vpa: qr.pa,
+        name: contactName || qr.pn || null,
+        rawUri: qr.rawUri,
+      });
+      setIsLinked(true);
+      toast.show({
+        variant: 'success',
+        title: 'QR linked to contact',
+        subtitle: `${contactName || 'Contact'} saved with ${qr.pa}`,
+      });
+    }
+
+    setVpa(qr.pa);
+    setSavedUri(qr.rawUri);
+    if (!contactName && qr.pn) setName(qr.pn);
+  };
+
+  // iOS/Android contact picker: chooses a contact and looks up their linked QR.
+  const pickContact = async () => {
+    const c = await presentContactPickerAsync();
+    if (!c) return;
+    const phone = c.phoneNumbers
+      ?.map((p) => normalizeIndianPhone(p.number ?? p.digits ?? ''))
+      .find(Boolean);
+    if (!phone) {
+      setNoMobile(true);
+      return;
+    }
+    setNoMobile(false);
+    setLinkedPhone(phone);
+    const contactName = c.name || '';
+    setName(contactName);
+
+    const saved = await getSavedPayee(db, phone);
+    if (saved) {
+      setVpa(saved.vpa);
+      setSavedUri(saved.rawUri);
+      setIsLinked(true);
+      if (saved.name && !contactName) setName(saved.name);
+    } else {
+      setVpa('');
+      setSavedUri(undefined);
+      setIsLinked(false);
+    }
+  };
+
+  const editVpa = (text: string) => {
+    setVpa(text);
+    setSavedUri(undefined);
+    setName('');
+    setNoMobile(false);
+    setLinkedPhone(undefined);
+    setIsLinked(false);
+  };
+
   const proceed = () => {
-    if (manual) start(parseUpiUri(`upi://pay?pa=${encodeURIComponent(vpa.trim())}`)!);
+    if (manual) {
+      const pn = name ? `&pn=${encodeURIComponent(name)}` : '';
+      const fallbackUri = `upi://pay?pa=${encodeURIComponent(vpa.trim())}${pn}`;
+      const raw =
+        savedUri && parseUpiUri(savedUri)?.pa.toLowerCase() === vpa.trim().toLowerCase()
+          ? savedUri
+          : fallbackUri;
+      start(parseUpiUri(raw)!);
+    }
     update({ amountPaise: paise });
     router.push('/pay/tag');
   };
@@ -70,22 +164,76 @@ export default function Amount() {
       <PayHeader title="Pay" />
       <View className="px-5 pt-2">
         {manual ? (
-          <View className="gap-1.5">
-            <View className="h-14 justify-center rounded-card bg-surface px-[14px]">
+          <View className="gap-2">
+            <View className="h-14 flex-row items-center rounded-card bg-surface pl-[14px]">
               <TextInput
                 value={vpa}
-                onChangeText={setVpa}
+                onChangeText={editVpa}
                 placeholder="name@bank"
                 placeholderTextColor={t.faint}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
                 accessibilityLabel="UPI ID"
-                className="font-sans text-base text-text"
+                className="flex-1 font-sans text-base text-text"
               />
+              <Button
+                variant="icon"
+                accessibilityLabel="Upload QR image"
+                onPress={() => uploadQr()}
+              >
+                <ImageIcon size={20} strokeWidth={1.8} color={t.text} />
+              </Button>
+              <Button variant="icon" accessibilityLabel="Pay a contact" onPress={pickContact}>
+                <BookUser size={22} strokeWidth={1.8} color={t.text} />
+              </Button>
             </View>
-            {vpa.trim() !== '' && !vpaOk && (
-              <Text className="text-[13px] text-bad-text">Enter a UPI ID like name@bank</Text>
+
+            {noMobile ? (
+              <Text className="text-[13px] text-bad-text">
+                That contact has no Indian mobile number
+              </Text>
+            ) : linkedPhone ? (
+              isLinked ? (
+                <View className="flex-row items-center justify-between rounded-card bg-surface p-3">
+                  <View className="mr-2 flex-1">
+                    <Text className="font-semibold text-base">{name}</Text>
+                    <Text className="text-[13px] text-ok">Linked: {vpa}</Text>
+                  </View>
+                  <Pressable
+                    role="button"
+                    onPress={() => uploadQr(linkedPhone, name)}
+                    className="rounded-pill border border-chip-border px-3 py-1.5 active:opacity-70"
+                  >
+                    <Text className="font-semibold text-[12px] text-text">Change QR</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View className="gap-2 rounded-card bg-surface p-3">
+                  <View className="flex-row items-center justify-between">
+                    <View className="mr-2 flex-1">
+                      <Text className="font-semibold text-base">{name}</Text>
+                      <Text className="text-[13px] text-muted">+91 {linkedPhone}</Text>
+                    </View>
+                    <Pressable
+                      role="button"
+                      onPress={() => uploadQr(linkedPhone, name)}
+                      className="flex-row items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 active:opacity-80"
+                    >
+                      <ImageIcon size={14} strokeWidth={2} color={t['on-primary']} />
+                      <Text className="font-bold text-[12px] text-on-primary">Upload QR</Text>
+                    </Pressable>
+                  </View>
+                  <Text className="text-[12px] text-muted">
+                    No QR linked for {name}. Ask them for their UPI QR screenshot and upload it once to save their real UPI ID.
+                  </Text>
+                </View>
+              )
+            ) : (
+              vpa.trim() !== '' &&
+              !vpaOk && (
+                <Text className="text-[13px] text-bad-text">Enter a UPI ID like name@bank</Text>
+              )
             )}
           </View>
         ) : (

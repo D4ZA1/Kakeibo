@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { payRaw, shareQrImage, type UpiApp } from '@/../modules/upi-intent';
+import { getSetting } from '@/db/client';
 import { useDb } from '@/db/provider';
 import type { Db } from '@/db/sqlite';
 import { usePayDraft, type PayDraft } from '@/features/pay/draft';
@@ -12,14 +13,31 @@ import { isMerchantCode } from '@/features/pay/mcc';
 import { applyAppResult, resumablePending, savePending } from '@/features/pay/payment';
 import { parseUpiResponse } from '@/features/pay/upiResponse';
 import { buildPayUri, parseUpiUri } from '@/features/pay/upiUri';
+import { toast } from '@/features/toast/toast';
 import { formatPaise } from '@/lib/money';
 
-export type Outcome = 'success' | 'confirm' | 'waiting';
+export type Outcome = 'success' | 'confirm';
+
+/** "Always tag" confirmation, shown once the user is back from the UPI app. */
+async function showRuleToast(db: Db, draft: PayDraft) {
+  if (!draft.categoryId) return;
+  const c = await db
+    .selectFrom('categories')
+    .select(['name', 'color'])
+    .where('id', '=', draft.categoryId)
+    .executeTakeFirst();
+  toast.show({
+    variant: 'info',
+    title: `Always tagged as ${c?.name}`,
+    subtitle: `${(draft.payeeName ?? draft.payeeVpa).split(',')[0]} skips tagging next time`,
+    categoryColor: c?.color,
+  });
+}
 
 /**
- * Saves the payment as pending, then hands it to the UPI app. Merchant QRs go as an intent and
- * resolve with the app's result; personal payees go as a shared QR image and return 'waiting'
- * (no result comes back, so Waiting sends the user to Confirm when they return).
+ * Saves the payment as pending, then hands it to the UPI app (in our task, so the user lands back
+ * in Kakeibo when they finish or back out). Merchant QRs go as an intent and resolve with the app's
+ * result; personal payees go as a shared QR image, which returns no result, so they go to Confirm.
  */
 export async function startPayment(db: Db, draft: PayDraft, app: UpiApp) {
   const qr = parseUpiUri(draft.rawUri);
@@ -29,14 +47,22 @@ export async function startPayment(db: Db, draft: PayDraft, app: UpiApp) {
   await savePending(db, { id, draft, payUri, upiApp: app.label });
   usePayDraft.getState().update({ txnId: id, upiApp: app.label });
 
-  const result: Promise<Outcome> = isMerchantCode(draft.merchantCode)
+  const launched: Promise<Outcome> = isMerchantCode(draft.merchantCode)
     ? payRaw(payUri, app.packageName)
         .then((r) => applyAppResult(db, id, parseUpiResponse(r.raw)))
-        .then(
-          (ok) => (ok ? 'success' : 'confirm'),
-          () => 'confirm',
-        )
-    : Promise.resolve(shareQrImage(payUri, app.packageName) ? 'waiting' : 'confirm');
+        .then((ok): Outcome => (ok ? 'success' : 'confirm'))
+    : shareQrImage(payUri, app.packageName).then((): Outcome => 'confirm');
+  const result = launched
+    .catch((e): Outcome => {
+      // Ambiguous launches (no result, or the launch itself failed) all route to Confirm (rule 2),
+      // but a real failure here is otherwise invisible, so surface it in dev.
+      if (__DEV__) console.warn('[pay] launch failed, going to Confirm:', e);
+      return 'confirm';
+    })
+    .finally(() => {
+      // After the user is back, so the toast isn't played off screen.
+      if (draft.saveRule) showRuleToast(db, draft);
+    });
   return { id, result };
 }
 
@@ -45,12 +71,15 @@ const REMINDERS = 'payment-reminders';
 // "Ask me later" ids, so the resume check doesn't immediately reopen them this session.
 const askedLater = new Set<string>();
 
-export async function askLater(id: string, payee: string, amountPaise: number) {
+export async function askLater(db: Db, id: string, payee: string, amountPaise: number) {
   askedLater.add(id);
+  if ((await getSetting(db, 'reminders')) === '0') return;
   // Android 13+ only shows the permission prompt once a channel exists.
   await Notifications.setNotificationChannelAsync(REMINDERS, {
     name: 'Payment reminders',
     importance: Notifications.AndroidImportance.DEFAULT,
+    // Payee and amount stay hidden on the lock screen.
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
   });
   const { granted } = await Notifications.requestPermissionsAsync();
   if (!granted) return;

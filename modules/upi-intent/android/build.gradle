@@ -18,3 +18,4 @@ dependencies {
   // QR encoding for shareQrImage (apps that only accept personal payments from a scanned QR).
   implementation 'com.google.zxing:core:3.5.1'
 }
+

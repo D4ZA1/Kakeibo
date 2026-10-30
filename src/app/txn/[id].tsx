@@ -33,6 +33,9 @@ export default function TxnDetail() {
             upiRef={txn.upiApprovalRef ?? txn.upiTxnId ?? undefined}
             app={txn.upiApp ?? undefined}
             when={new Date(txn.createdAt)}
+            onChangeCategory={() =>
+              router.push({ pathname: '/pay/category', params: { id: txn.id } })
+            }
           />
         </ScrollView>
       ) : txn === null ? (
