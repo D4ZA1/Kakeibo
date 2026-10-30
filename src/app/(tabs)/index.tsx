@@ -19,7 +19,7 @@ async function homeData(db: Db) {
   const month = periodRange('month', new Date());
   const prev = previousRange('month', month);
   const [name, total, prevTotal, byCategory, riser, recent] = await Promise.all([
-    getSetting(db, 'name'),
+    getSetting(db, 'firstName'),
     periodTotal(db, month),
     periodTotal(db, prev),
     totalsByCategory(db, month),
@@ -64,7 +64,7 @@ export default function Home() {
             <Avatar name={name ?? ''} />
             <View>
               <Text className="text-muted">{greeting()}</Text>
-              <Text className="font-extrabold text-[17px]">{name?.split(' ')[0] ?? 'Hi'}</Text>
+              <Text className="font-extrabold text-[17px]">{name ?? 'Hi'}</Text>
             </View>
           </Pressable>
           <Button variant="icon" accessibilityLabel="Notifications">

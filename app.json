@@ -8,7 +8,8 @@
     "scheme": "kakeibo",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.jaswanth.kakeibo"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +20,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.Kakeibo",
-      "allowBackup": false
+      "allowBackup": false,
+      "permissions": ["android.permission.CAMERA"]
     },
     "plugins": [
       "expo-router",
@@ -50,8 +52,21 @@
         "expo-image-picker",
         {
           "photosPermission": "Kakeibo reads a QR code from a photo you pick.",
-          "cameraPermission": false,
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Kakeibo reads a QR code from a photo you pick, and removes the payment QRs it saves.",
+          "savePhotosPermission": "Kakeibo saves the payment QR so you can scan it in your UPI app, then deletes it.",
+          "granularPermissions": []
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Kakeibo opens your contacts so you can pay someone by their phone number."
         }
       ]
     ],

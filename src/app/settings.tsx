@@ -1,48 +1,38 @@
 import Constants from 'expo-constants';
+import { reloadAppAsync } from 'expo';
+import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import {
   ArrowLeft,
   Bell,
-  ChartPie,
-  CircleHelp,
-  Cloud,
   CreditCard,
   Database,
   Download,
-  FileText,
   Lock,
-  LogOut,
   Moon,
   ScanLine,
   Trash2,
-  TrendingUp,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { getInstalledApps, shareFile } from '@/../modules/upi-intent';
 import { Avatar } from '@/components/Avatar';
 import { SettingsGroup, SettingsRow } from '@/components/SettingsRow';
-import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
-import { setSetting } from '@/db/client';
+import { setSetting, wipeDatabase, type SettingKey } from '@/db/client';
 import { seedSampleMonths } from '@/db/dev-seed';
-import { useDb } from '@/db/provider';
-import { SAMPLE_PROFILE } from '@/db/sample';
+import { useDb, useLiveQuery } from '@/db/provider';
 import type { Db } from '@/db/sqlite';
-import { SEED_CATEGORIES } from '@/db/seed';
+import { exportCsv } from '@/features/export/csv';
 import { periodTotal } from '@/features/insights/queries';
+import { lockAvailable, setAppLock } from '@/features/lock/lock';
+import { toast, tryOrToast } from '@/features/toast/toast';
 import { periodRange, previousRange } from '@/lib/dates';
 import { formatPaise } from '@/lib/money';
 import { useTokens } from '@/lib/use-tokens';
-
-// ponytail: only Dark mode does anything; the other switches are local state until their milestones
-// (theme persistence lands with the settings table in M1).
-function useDemoToggle(initial: boolean) {
-  const [value, onChange] = useState(initial);
-  return { value, onChange };
-}
 
 async function seedAndReadBack(db: Db) {
   const inserted = await seedSampleMonths(db);
@@ -57,38 +47,80 @@ async function seedAndReadBack(db: Db) {
   );
 }
 
+async function exportAll(db: Db) {
+  const day = new Date().toISOString().slice(0, 10);
+  const { csv, count } = await exportCsv(db);
+  if (!shareFile(csv, `kakeibo-${day}.csv`, 'text/csv'))
+    throw new Error('Share sheet did not open');
+  toast.show({ variant: 'success', title: `Exported ${count} payment${count === 1 ? '' : 's'}` });
+}
+
+function confirmDeleteAll() {
+  const wipe = async () => {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    await wipeDatabase();
+    await reloadAppAsync();
+  };
+  Alert.alert(
+    'Delete all data?',
+    'Every payment, rule and setting on this phone is deleted. Export a CSV first if you want a copy.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Are you sure?', "This can't be undone.", [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete everything', style: 'destructive', onPress: wipe },
+          ]),
+      },
+    ],
+  );
+}
+
 export default function Settings() {
   const t = useTokens();
   const db = useDb();
   const { colorScheme, setColorScheme } = useColorScheme();
-  const chooseEveryTime = useDemoToggle(false);
-  const backup = useDemoToggle(true);
-  const appLock = useDemoToggle(true);
-  const reminders = useDemoToggle(true);
-  const monthly = useDemoToggle(true);
+  const settings = useLiveQuery(async (db) => {
+    const rows = await db.selectFrom('settings').selectAll().execute();
+    return Object.fromEntries(rows.map((r) => [r.key, r.value])) as Partial<
+      Record<SettingKey, string>
+    >;
+  }, []);
+  const [canLock, setCanLock] = useState(true);
+  useEffect(() => {
+    lockAvailable().then(setCanLock);
+  }, []);
+
+  const s = settings ?? {};
+  const preferred = getInstalledApps().find((a) => a.packageName === s.preferredUpiApp);
+  const flag = (key: SettingKey, on: boolean) => setSetting(db, key, on ? '1' : '0');
 
   return (
     <SafeAreaView className="flex-1 bg-bg" edges={['top']}>
       <View className="flex-row items-center justify-between px-5 pb-2 pt-4">
-        <Button variant="icon" accessibilityLabel="Back" onPress={() => router.back()}>
+        <Pressable
+          role="button"
+          accessibilityLabel="Back"
+          onPress={() => router.back()}
+          className="h-11 w-11 items-center justify-center rounded-[22px] bg-surface"
+        >
           <ArrowLeft size={22} strokeWidth={1.8} color={t.text} />
-        </Button>
+        </Pressable>
         <Text className="font-semibold text-lg">Settings</Text>
         <View className="w-11" />
       </View>
 
       <ScrollView contentContainerClassName="gap-6 px-5 pb-10 pt-4">
         <View className="flex-row items-center gap-4 rounded-card bg-surface p-5">
-          <Avatar name={SAMPLE_PROFILE.name} size={56} />
-          <View className="flex-1">
-            <Text className="font-extrabold text-[22px]">{SAMPLE_PROFILE.name}</Text>
-            <Text className="text-muted">{SAMPLE_PROFILE.phone}</Text>
-            <Text className="text-muted">{SAMPLE_PROFILE.email}</Text>
-          </View>
+          <Avatar name={s.firstName ?? ''} size={56} />
+          <Text className="flex-1 font-extrabold text-[22px]">{s.firstName}</Text>
           <Pressable
             role="button"
             onPress={() => router.push('/profile/edit')}
-            className="h-9 justify-center rounded-[18px] border-[1.5px] border-outline px-4"
+            className="h-11 justify-center rounded-[22px] border-[1.5px] border-outline px-4"
           >
             <Text className="font-semibold">Edit</Text>
           </Pressable>
@@ -111,42 +143,63 @@ export default function Settings() {
         </SettingsGroup>
 
         <SettingsGroup label="Payments">
-          <SettingsRow icon={CreditCard} title="Default UPI app" value="Google Pay" />
+          <SettingsRow
+            icon={CreditCard}
+            title="Default UPI app"
+            value={preferred?.label ?? 'None yet'}
+          />
           <SettingsRow
             icon={ScanLine}
             title="Choose app every time"
             subtitle="Show the app list before each payment"
-            toggle={chooseEveryTime}
+            toggle={{
+              value: s.alwaysUseUpiApp !== '1',
+              onChange: (on) => flag('alwaysUseUpiApp', !on),
+            }}
           />
-        </SettingsGroup>
-
-        <SettingsGroup label="Categories & data">
-          <SettingsRow
-            icon={ChartPie}
-            title="Manage categories"
-            value={String(SEED_CATEGORIES.length)}
-          />
-          <SettingsRow
-            icon={Cloud}
-            title="Backup & sync"
-            subtitle="Last synced 2 min ago"
-            toggle={backup}
-          />
-          <SettingsRow icon={Download} title="Export as CSV" />
         </SettingsGroup>
 
         <SettingsGroup label="Security">
           <SettingsRow
             icon={Lock}
             title="App lock"
-            subtitle="Fingerprint or phone PIN"
-            toggle={appLock}
+            subtitle={
+              canLock
+                ? 'Fingerprint, face or phone PIN after a minute away'
+                : 'Set a screen lock on your phone first'
+            }
+            toggle={{
+              value: s.appLock === '1',
+              onChange: (on) => {
+                if (on && !canLock) {
+                  Alert.alert(
+                    'No screen lock',
+                    'App lock uses your phone’s fingerprint, face or PIN. Set one in Android settings first.',
+                  );
+                  return;
+                }
+                setAppLock(db, on);
+              },
+            }}
           />
         </SettingsGroup>
 
         <SettingsGroup label="Notifications">
-          <SettingsRow icon={Bell} title="Pending payment reminders" toggle={reminders} />
-          <SettingsRow icon={TrendingUp} title="Monthly summary" toggle={monthly} />
+          <SettingsRow
+            icon={Bell}
+            title="Pending payment reminders"
+            subtitle="After “Not sure, ask me later”"
+            toggle={{ value: s.reminders !== '0', onChange: (on) => flag('reminders', on) }}
+          />
+        </SettingsGroup>
+
+        <SettingsGroup label="Your data">
+          <SettingsRow
+            icon={Download}
+            title="Export as CSV"
+            onPress={() => tryOrToast("Couldn't export", () => exportAll(db))}
+          />
+          <SettingsRow icon={Trash2} title="Delete all data" onPress={confirmDeleteAll} />
         </SettingsGroup>
 
         {__DEV__ && (
@@ -156,23 +209,14 @@ export default function Settings() {
               title="Seed sample months"
               onPress={() => seedAndReadBack(db)}
             />
+            <SettingsRow
+              icon={CreditCard}
+              title="UPI intent test"
+              onPress={() => router.push('/dev/upi-test')}
+            />
           </SettingsGroup>
         )}
 
-        <SettingsGroup label="About">
-          <SettingsRow icon={CircleHelp} title="Help & feedback" />
-          <SettingsRow icon={FileText} title="Privacy policy" />
-          <SettingsRow icon={FileText} title="Terms of use" />
-        </SettingsGroup>
-
-        <Button variant="outline" onPress={() => router.replace('/auth/login')}>
-          <LogOut size={18} strokeWidth={1.8} color={t.text} />
-          <Text>Log out</Text>
-        </Button>
-        <Pressable role="button" className="h-11 flex-row items-center justify-center gap-2">
-          <Trash2 size={18} strokeWidth={1.8} color={t['bad-text']} />
-          <Text className="font-semibold text-bad-text">Delete account and data</Text>
-        </Pressable>
         <Text className="text-center text-[13px] text-muted">
           Version {Constants.expoConfig?.version}
         </Text>

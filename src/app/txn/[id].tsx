@@ -6,20 +6,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { categoryOf, Receipt } from '@/components/receipt/Receipt';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
-import { useCategories, useLiveQuery } from '@/db/provider';
+import { useCategories, useTxn } from '@/db/provider';
 import { useTokens } from '@/lib/use-tokens';
 
 export default function TxnDetail() {
   const t = useTokens();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { list: categories } = useCategories();
-  // null = looked up and not found; undefined = still loading.
-  const txn = useLiveQuery(
-    async (db) =>
-      (await db.selectFrom('transactions').selectAll().where('id', '=', id).executeTakeFirst()) ??
-      null,
-    [id],
-  );
+  const txn = useTxn(id); // null = not found, undefined = loading
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
@@ -39,6 +33,9 @@ export default function TxnDetail() {
             upiRef={txn.upiApprovalRef ?? txn.upiTxnId ?? undefined}
             app={txn.upiApp ?? undefined}
             when={new Date(txn.createdAt)}
+            onChangeCategory={() =>
+              router.push({ pathname: '/pay/category', params: { id: txn.id } })
+            }
           />
         </ScrollView>
       ) : txn === null ? (

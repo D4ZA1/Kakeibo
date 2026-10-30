@@ -18,6 +18,8 @@ Sample data in the design (Apple Store, ₹5,900, Aarav) is illustrative. Real s
 | `/pay/confirm` | Did it go through? | 7 Confirm payment |
 | `/pay/success` | Paid | 7a Paid |
 | `/pay/failed` | Failed | 7b Failed |
+| `/pay/category` | Change category sheet (modal), from the receipt's category pill | — |
+| `/welcome` | First-launch onboarding: first name + privacy notice | — |
 | `/insights/compare` | Month vs month | 9 Compare months |
 | `/txn/[id]` | Transaction detail (reuses the Paid layout) | — |
 

@@ -13,4 +13,9 @@ export const MCC_TO_CATEGORY: Record<string, string> = {
   '5200': 'home', '5251': 'home', '5712': 'home', '5722': 'home',
 };
 
+/**
+ * Merchant QRs go to the UPI app as a `upi://pay` intent. Personal payees don't: Google Pay, PhonePe
+ * and Paytm refuse intents to personal VPAs from other apps, but accept the same link shared as a
+ * QR image (shareQrImage). Spike results: docs/upi-native-module.md.
+ */
 export const isMerchantCode = (mc?: string) => Boolean(mc) && mc !== '0000';

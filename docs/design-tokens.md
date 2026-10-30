@@ -41,6 +41,9 @@ Reference images: `docs/design/` holds PNG exports of every screen. Dark screens
 | `toggle-knob-on` | `#1F1F1F` | `#FFFFFF` | Knob when on |
 | `toggle-knob-off` | `#BDBDBD` | `#FFFFFF` | Knob when off |
 | `scrim` | `rgba(0,0,0,0.55)` | `rgba(0,0,0,0.35)` | Behind bottom sheets |
+| `toast` | `#3A3A3A` | `#FFFFFF` | Toast background (docs/toasts.md) |
+| `toast-border` | `rgba(255,255,255,0.14)` | `rgba(0,0,0,0.10)` | Toast hairline edge |
+| `toast-shadow` | `rgba(0,0,0,0.6)` | `rgba(20,20,20,0.22)` | Toast shadow colour |
 | `camera` | `#141414` | `#141414` | Scan screen background (always dark) |
 
 Rule of thumb: pastel colors are **fills only**. Text or icons that carry meaning use the `*-text` tokens, which are darkened in light mode for contrast.
@@ -95,6 +98,9 @@ Category colors live in the `categories` table and are applied with inline `styl
   --toggle-knob-on: #FFFFFF;
   --toggle-knob-off: #FFFFFF;
   --scrim: rgba(0, 0, 0, 0.35);
+  --toast: #ffffff;
+  --toast-border: rgba(0, 0, 0, 0.1);
+  --toast-shadow: rgba(20, 20, 20, 0.22);
 }
 
 .dark:root {
@@ -121,6 +127,9 @@ Category colors live in the `categories` table and are applied with inline `styl
   --toggle-knob-on: #1F1F1F;
   --toggle-knob-off: #BDBDBD;
   --scrim: rgba(0, 0, 0, 0.55);
+  --toast: #3a3a3a;
+  --toast-border: rgba(255, 255, 255, 0.14);
+  --toast-shadow: rgba(0, 0, 0, 0.6);
 }
 ```
 

@@ -1,4 +1,5 @@
 import { CameraView, scanFromURLAsync, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 import { launchImageLibraryAsync } from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
 import { ArrowLeft, AtSign, Flashlight, Image as ImageIcon, ScanLine } from 'lucide-react-native';
@@ -45,6 +46,7 @@ export default function Scan() {
     busy.current = true;
     const qr = parseUpiUri(text);
     if (!qr) return setInvalid(true); // stays busy until "Scan to pay" re-arms
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const draft = start(qr);
     router.push(draft.amountLocked ? '/pay/details' : '/pay/amount');
   };

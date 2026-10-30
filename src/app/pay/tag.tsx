@@ -1,22 +1,21 @@
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CategoryGrid } from '@/components/CategoryGrid';
 import { PayeeLetter, PayHeader } from '@/components/pay/PayParts';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Text } from '@/components/ui/text';
-import { useCategories, useDb, useLiveQuery } from '@/db/provider';
+import { useCategories, useLiveQuery } from '@/db/provider';
 import { usePayDraft } from '@/features/pay/draft';
-import { savePayeeRule, suggestCategory } from '@/features/pay/suggest';
+import { suggestCategory } from '@/features/pay/suggest';
 import { formatPaise } from '@/lib/money';
 import { useTokens } from '@/lib/use-tokens';
-import { cn } from '@/lib/utils';
 
 export default function Tag() {
   const t = useTokens();
-  const db = useDb();
   const d = usePayDraft((s) => s.draft);
   const update = usePayDraft((s) => s.update);
   const { list: categories, cat } = useCategories();
@@ -39,11 +38,9 @@ export default function Tag() {
   const name = d.payeeName ?? d.payeeVpa;
   const shortPayee = name.split(',')[0];
 
-  const pay = async () => {
+  const pay = () => {
     if (!categoryId) return;
-    update({ categoryId, note: note.trim() || undefined });
-    // ponytail: rule saved on tapping Pay, not after the payment succeeds; move into the M5 pay step if that matters.
-    if (always) await savePayeeRule(db, d.payeeVpa, categoryId);
+    update({ categoryId, note: note.trim() || undefined, saveRule: always });
     router.push('/pay/choose-app');
   };
 
@@ -68,30 +65,7 @@ export default function Tag() {
           <Text className="font-bold text-lg">Category</Text>
           {suggested && <Text className="text-[14px] text-muted">Suggested: {suggested.name}</Text>}
         </View>
-        <View className="-m-1 flex-row flex-wrap">
-          {categories.map((c) => {
-            const on = c.id === categoryId;
-            return (
-              <View key={c.id} className="w-1/4 p-1">
-                <Pressable
-                  role="radio"
-                  aria-checked={on}
-                  accessibilityLabel={c.name}
-                  onPress={() => setPicked(c.id)}
-                  className={cn(
-                    'h-[76px] items-center justify-center gap-1.5 rounded-tile border-[1.5px] bg-surface',
-                    on ? 'border-text' : 'border-transparent',
-                  )}
-                >
-                  <View className="h-5 w-5 rounded-full" style={{ backgroundColor: c.color }} />
-                  <Text className={cn('text-[14px]', on && 'font-bold')} numberOfLines={1}>
-                    {c.name}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </View>
+        <CategoryGrid categories={categories} selected={categoryId} onSelect={setPicked} />
 
         <Text className="mb-2 mt-6 font-bold text-lg">
           Note <Text className="font-sans text-lg text-muted">(optional)</Text>
@@ -126,9 +100,7 @@ export default function Tag() {
         <Button disabled={!selected} onPress={pay}>
           <Text>Pay {formatPaise(d.amountPaise)}</Text>
         </Button>
-        <Text className="text-center text-[13px] text-muted">
-          Opens your UPI app to enter your PIN
-        </Text>
+        <Text className="text-center text-[13px] text-muted">Opens your UPI app to enter your PIN</Text>
       </View>
     </SafeAreaView>
   );

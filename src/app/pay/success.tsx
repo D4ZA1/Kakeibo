@@ -1,31 +1,52 @@
-import { router } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { categoryOf, Receipt } from '@/components/receipt/Receipt';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
-import { SAMPLE_DRAFT } from '@/db/sample';
-import { SEED_CATEGORIES } from '@/db/seed';
+import { useCategories, useTxn } from '@/db/provider';
+import { usePayDraft } from '@/features/pay/draft';
+
+const groupRef = (ref: string) => ref.replace(/(\d{4})(?=\d)/g, '$1 ');
 
 export default function Success() {
-  const d = SAMPLE_DRAFT;
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { list: categories } = useCategories();
+  const clearDraft = usePayDraft((s) => s.clear);
+  const txn = useTxn(id);
+  useEffect(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, []);
+  if (!txn || !categories.length) return <SafeAreaView className="flex-1 bg-bg" />;
+  const ref = txn.upiApprovalRef ?? txn.upiTxnId;
+
   return (
     <SafeAreaView className="flex-1 bg-bg">
       <ScrollView contentContainerClassName="px-5 pt-2 pb-6">
         <Receipt
           status="success"
-          amountPaise={d.amountPaise}
-          payeeName={d.payeeName}
-          category={categoryOf(d.categoryId, SEED_CATEGORIES)}
-          note="Charger for MacBook"
-          upiRef={d.upiApprovalRef.replace(/(\d{4})(?=\d)/g, '$1 ')}
-          app={d.upiApp}
-          when={new Date()}
+          amountPaise={txn.amountPaise}
+          payeeName={txn.payeeName ?? txn.payeeVpa}
+          category={categoryOf(txn.categoryId, categories)}
+          note={txn.note ?? undefined}
+          upiRef={ref ? groupRef(ref) : undefined}
+          app={txn.upiApp ?? undefined}
+          when={new Date(txn.createdAt)}
+          onChangeCategory={() =>
+            router.push({ pathname: '/pay/category', params: { id: txn.id } })
+          }
         />
       </ScrollView>
       <View className="px-5 pb-4">
-        <Button onPress={() => router.dismissTo('/')}>
+        <Button
+          onPress={() => {
+            clearDraft();
+            router.dismissTo('/');
+          }}
+        >
           <Text>Done</Text>
         </Button>
       </View>
